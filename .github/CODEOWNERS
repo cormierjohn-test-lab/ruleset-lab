@@ -1,0 +1,3 @@
+# Proxy for the real repo's proposed CODEOWNERS.
+# Real form would be: * @dominos-pizza/dai-databricks-all-managers
+* @cormierjohn-test-lab/managers
