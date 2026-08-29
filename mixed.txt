@@ -1,1 +1,2 @@
 manager commit first
+non-manager commit last
