@@ -1,0 +1,3 @@
+manager commit first
+non-manager commit last
+manager pushes LAST
