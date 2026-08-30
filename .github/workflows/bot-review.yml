@@ -1,0 +1,19 @@
+name: Bot Review Probe
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        required: true
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr }}/reviews" \
+            --method POST -f event=REQUEST_CHANGES \
+            -f body='Simulated agent REQUEST_CHANGES'
