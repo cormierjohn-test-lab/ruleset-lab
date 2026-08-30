@@ -1,0 +1,111 @@
+# Answers one question about every Python file a pull request changes: would
+# this fail the moment it runs?
+#
+# Two checks today -- the file parses, and the module-level names it reads
+# actually resolve. Both are runtime-fatal. Neither is style.
+#
+# `py_compile` and `ast.parse` only prove a file is syntactically valid. Neither
+# says anything about whether the names a module-level statement refers to
+# actually exist there, so this passes both and still fails in production:
+#
+#     class Context:
+#         ENVIRONMENT = dbutils.widgets.get("ENV_NAME").lower()
+#
+#     scope = getSecretScopeName(env=ENVIRONMENT.lower())   # NameError
+#
+# A name bound in a class body is not in scope outside it. That exact bug reached
+# `develop` in 14 notebooks, introduced by an automated edit that reused an
+# existing local without checking which scope it lived in -- a mistake a machine
+# makes far more readily than a human reading one file at a time. As more changes
+# here are machine-generated, this belongs in CI rather than in each session's
+# scratch scripts.
+#
+# Scoped to files the pull request actually changed. A repository-wide run
+# reports pre-existing problems the author did not cause, which is how a check
+# gets ignored and then switched off.
+
+name: Python pre-flight
+
+on:
+  pull_request:
+    # Only the events that can change what is being checked.
+    #
+    #   opened      first look at the PR
+    #   synchronize a new commit was pushed
+    #   reopened    the head SHA is unchanged, but the PR may have sat closed
+    #               while develop moved on, so the merge base -- and therefore
+    #               the set of files this diffs against -- can differ
+    #
+    # Drafts are checked too -- deliberately no `draft: false`. The run costs
+    # seconds and no AI spend, and catching a break while the work is still in
+    # progress is cheaper for the author than finding it after review starts.
+    #
+    # ready_for_review is therefore absent rather than skipped: since drafts
+    # already run, that event would only repeat a result that is still valid.
+    # review_requested likewise -- asking for a review does not change a line of
+    # code, so re-running proves nothing.
+    types: [opened, reopened, synchronize]
+    #
+    # NO `paths:` FILTER, AND THIS IS LOAD-BEARING.
+    #
+    # This check is required by the `develop` ruleset. A required check that
+    # never runs is never REPORTED -- GitHub shows it as Expected forever and the
+    # pull request cannot be merged by anyone. With a `paths: "**/*.py"` filter,
+    # every PR touching no Python would strand: 29 of the last 40 merged PRs
+    # touch no .py at all.
+    #
+    # A companion workflow posting a passing status for the other PRs does NOT
+    # solve it. GitHub evaluates paths per FILE with OR semantics, so on a mixed
+    # PR both workflows fire, both write the same context, and last-write-wins
+    # can stamp a pass over a real failure. That was verified when the equivalent
+    # gate existed for the notebook reviewer, not assumed.
+    #
+    # So it runs on every pull request and decides internally. When nothing
+    # Python changed the script prints "No Python files to check" and exits 0,
+    # which costs a checkout and a Python install -- seconds, and no AI spend.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-preflight-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # The job id stays `check`; this `name` is what the required-status context
+    # becomes. In a plain Actions workflow the context is the job's name, not the
+    # workflow's, so without this the ruleset would have to require a status
+    # literally called "check" -- ambiguous to read, and satisfiable by any other
+    # workflow in this repository that happens to have a job with the same id.
+    name: Python pre-flight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The merge base is needed to work out what this PR changed.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          # Must not be older than the runtime these files execute on. DBR 18 LTS
+          # ships Python 3.12, which accepts nested quotes inside an f-string
+          # (PEP 701):
+          #
+          #     f"{context.dir}/Keys {datetime.now().strftime("%Y%m%d")}.xls"
+          #
+          # 3.11 rejects that as `f-string: unmatched '('`, so pinning an older
+          # version here reports perfectly good production code as broken. A
+          # checker that cries wolf gets switched off.
+          #
+          # Raise this when the estate moves past 3.12; never lower it.
+          python-version: "3.12"
+
+      - name: Pre-flight changed Python files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          python .github/scripts/python_preflight.py --changed "${BASE_SHA}"
