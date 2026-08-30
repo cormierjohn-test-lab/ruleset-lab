@@ -44,7 +44,12 @@ on:
     # already run, that event would only repeat a result that is still valid.
     # review_requested likewise -- asking for a review does not change a line of
     # code, so re-running proves nothing.
-    types: [opened, reopened, synchronize]
+    #
+    # labeled/unlabeled are here only for the escape hatch below. Applying a
+    # label does not move the head SHA, so the workflow has to re-run and
+    # re-post the status for the same commit; a check run is keyed on name and
+    # head SHA, and the most recent result wins.
+    types: [opened, reopened, synchronize, labeled, unlabeled]
     #
     # NO `paths:` FILTER, AND THIS IS LOAD-BEARING.
     #
@@ -103,7 +108,41 @@ jobs:
           # Raise this when the estate moves past 3.12; never lower it.
           python-version: "3.12"
 
+      # Escape hatch. Because bypass_actors is a property of the whole ruleset
+      # and not of an individual rule, there is no way to let someone past this
+      # check without also dropping the approval requirement. A label is the
+      # only lever left.
+      #
+      # It is deliberately noisy rather than silent. The step announces itself in
+      # the job summary and names the actor, so an override is visible in the run
+      # log rather than only as a label someone can remove afterwards. Anyone
+      # using it should say why in the pull request.
+      #
+      # This exists for the case where the check is wrong -- a false positive
+      # like the Python 3.11 f-string one -- not for shipping code that fails it.
+      # If it is being used routinely, the check needs fixing, not bypassing.
+      - name: Note the override
+        if: contains(github.event.pull_request.labels.*.name, 'skip-preflight')
+        env:
+          ACTOR: ${{ github.actor }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Python pre-flight skipped"
+            echo
+            echo "PR #${PR} carries the \`skip-preflight\` label, so this check"
+            echo "reported success without examining anything."
+            echo
+            echo "Requested by: @${ACTOR}"
+            echo
+            echo "The label should be removed once the underlying problem is"
+            echo "fixed. If the check itself is wrong, fix the check."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning title=Pre-flight skipped::PR #${PR} bypassed Python pre-flight via the skip-preflight label (@${ACTOR})"
+
       - name: Pre-flight changed Python files
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-preflight') }}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
