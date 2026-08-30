@@ -1,0 +1,11 @@
+name: Paths-Ignore Probe
+on:
+  pull_request:
+    paths-ignore:
+      - '**/*.py'
+      - '**/*.ipynb'
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "RAN. Changed files did not consist solely of py/ipynb."
