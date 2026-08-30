@@ -1,0 +1,26 @@
+name: Token Capability Probe
+on:
+  pull_request:
+    types: [opened, synchronize]
+permissions:
+  contents: read
+  checks: write
+  statuses: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Try create-check-run with GITHUB_TOKEN
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "=== check-runs ==="
+          gh api "repos/${{ github.repository }}/check-runs" --method POST \
+            -f name='Probe Check Run' \
+            -f head_sha='${{ github.event.pull_request.head.sha }}' \
+            -f status=completed -f conclusion=success \
+            && echo "CHECK_RUN_OK" || echo "CHECK_RUN_FAILED"
+          echo "=== statuses ==="
+          gh api "repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
+            --method POST -f state=success -f context='Probe Status' \
+            && echo "STATUS_OK" || echo "STATUS_FAILED"
