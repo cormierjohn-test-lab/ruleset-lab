@@ -1,10 +1,11 @@
 # Databricks notebook source
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # COMMAND ----------
 
-# DEFECT A: naive datetime.now() with no timezone
-run_started = datetime.now()
+# FIXED: now localized
+run_started = datetime.now(ZoneInfo("America/Chicago"))
 
 # COMMAND ----------
 
