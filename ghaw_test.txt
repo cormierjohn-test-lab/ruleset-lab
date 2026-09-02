@@ -5,3 +5,4 @@ v4
 v5
 probe-224650
 trigger 2026-09-02T03:34:02Z PAT now has Copilot Requests + Models
+trigger 2026-09-02T03:38:55Z model=claude-sonnet-5 via repo variable
