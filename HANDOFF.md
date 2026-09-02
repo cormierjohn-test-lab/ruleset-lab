@@ -1,16 +1,67 @@
 # Handoff — get a gh-aw agent actually running in this repo
 
 **Goal:** get *any* gh-aw agentic workflow to execute an agent turn in
-`cormierjohn-test-lab/ruleset-lab`. The trigger does not matter — `synchronize`,
-a slash command, an issue comment, `workflow_dispatch`, anything. Right now the
-agent job never runs a single LLM turn.
+`cormierjohn-test-lab/ruleset-lab`.
 
-Everything up to the model call works. The blocker is a **HTTP 401 from the
-Copilot inference proxy**.
+## RESOLVED 2026-09-02
+
+Run [33588186977](https://github.com/cormierjohn-test-lab/ruleset-lab/actions/runs/33588186977)
+completed a full agent turn on `claude-sonnet-5`: every job green, `Gate B
+Probe` check run published on the head SHA, comment posted, ~15 AI credits.
+The Copilot Pro subscription on `cormierjohn` is sufficient. No org Copilot
+billing was needed.
+
+Two things were wrong, and both were assumptions in this doc:
+
+1. **The PAT never had the Copilot Requests permission.** It had the
+   *repository* permission "Copilot agent settings", which is unrelated.
+   Copilot Requests is an *account* permission, only offered as **Read-only**
+   (there is no read-and-write option). It also needs a second, undocumented
+   account permission: **Models: Read-only**. Without Models, the proxy's
+   `/models` fetch returns 401 and every run dies before inference. Editing the
+   existing token's permissions keeps the same secret value, so
+   `COPILOT_GITHUB_TOKEN` did not need to be re-set.
+2. **`pull_request` runs use the workflow file from the PR branch**, merged with
+   `main`. The probe branch still pinned `model: claude-sonnet-4.6` in both the
+   `.md` and the `.lock.yml`, so a repo variable set on `main` was ignored, and
+   4.6 is not in the integrator's model list. Fix was syncing the two workflow
+   files on `probe/ghaw-gate-test` to `main`.
+
+Model is now set by the repo variable `GH_AW_DEFAULT_MODEL_COPILOT=claude-sonnet-5`
+(the compiled lock reads `vars.GH_AW_MODEL_AGENT_COPILOT ||
+vars.GH_AW_DEFAULT_MODEL_COPILOT || 'auto'`), so changing model needs no
+recompile or merge. Models the `agentic-workflows` integrator accepts include
+`claude-sonnet-5`, `claude-opus-5`, `claude-fable-5.1`, `claude-haiku-4.5`,
+`gpt-5.5`, `gpt-5.4`. `claude-sonnet-4.6` is **not** accepted.
+
+Corrections to the earlier analysis, so nobody chases them again:
+- The `model: auto` 400 run had **not** authenticated. Its `/models` fetch also
+  returned 401; the pricing error was the proxy's local fallback for an empty
+  model list.
+- `claude-sonnet-5` was never an invalid model id. It 401'd for the same token
+  reason as everything else.
+- The proxy sends the raw PAT as `Authorization: Bearer` to
+  `api.githubcopilot.com` with `Copilot-Integration-Id: agentic-workflows`. No
+  token exchange. Individual plans work fine with this.
+
+Local diagnostic that matches what CI does (Copilot CLI is installed via
+`npm install -g @github/copilot`; CI pins 1.0.79):
+
+```bash
+ export COPILOT_GITHUB_TOKEN='github_pat_...'
+copilot --prefer-version 1.0.79 -p "reply with the single word PONG"; unset COPILOT_GITHUB_TOKEN
+```
+
+**Still untested:** the `proceed=false` / `noop` path. The successful run took
+`push_after_bot_review`, so whether `noop` leaves a green check run behind is
+still the open question this probe was built for. It needs a `synchronize`
+push on a PR the bot has never reviewed.
+
+Everything below this line is the pre-resolution state, kept for the record.
 
 ---
 
-## The blocker, precisely
+## The blocker, precisely (historical)
 
 Every run reaches the agent job and dies there:
 
@@ -70,9 +121,9 @@ is what makes them conclusions rather than guesses.
 2. **Classic PATs (`ghp_`) are rejected outright** — hard error, "Classic PATs
    are not supported for GitHub Copilot".
 3. **The token must be a fine-grained PAT** (`github_pat_`), **personal
-   resource owner** (not the org), with **Copilot Requests: read and write**.
-   Read-only produced the same 401; flipping to read-and-write changed the
-   downstream error, proving the level mattered.
+   resource owner** (not the org). ~~with Copilot Requests: read and write~~
+   **This was wrong.** The token had no account permissions at all; see the
+   RESOLVED section. Copilot Requests only exists as read-only.
 4. **`claude-sonnet-5` is not a valid gh-aw model id.** gh-aw's own workflows
    use `claude-sonnet-4.6`, `claude-haiku-4.5`, `claude-opus-4.8`.
 5. **Leaving `model` unset resolves to `auto`, which fails differently:**
@@ -110,7 +161,9 @@ never a quota problem.
 - Ruleset `develop-shape` on `main`: requires a PR, requires the
   `Notebook PR Review` status check, `dismiss_stale_reviews_on_push: true`,
   bypass actor = the `managers` team
-- Secret: **`COPILOT_GITHUB_TOKEN`** (set 2026-09-02T02:00:47Z)
+- Secret: **`COPILOT_GITHUB_TOKEN`** (set 2026-09-02T02:00:47Z; permissions
+  corrected in place 2026-09-02, same value)
+- Variable: **`GH_AW_DEFAULT_MODEL_COPILOT`** = `claude-sonnet-5`
 
 To merge to `main`, use `cormierjohn` with `gh pr merge <N> --merge --admin`.
 
