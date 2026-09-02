@@ -23,5 +23,20 @@ Suspected conflicts: 2 vs 5 (CODEOWNERS auto-requests), and 4 vs 6
 (a check run is bound to a SHA, so skipping may leave a new head
 unchecked).
 
-The agent itself is NOT installed here - this org has no Copilot
-billing. Check runs are created directly via the API to test gating.
+## Agent status
+
+A gh-aw agent (`gate-b-agentic.md`) runs here on `claude-sonnet-5`, billed
+to `cormierjohn`'s personal Copilot Pro via `COPILOT_GITHUB_TOKEN`. The org
+has no Copilot seats and does not need any. Both Gate B paths are proven:
+
+| PR | Path | Result |
+|---|---|---|
+| #42 | bot already reviewed, push again | agent runs, check run + comment |
+| #50 | bot never reviewed, push | gate declines, `noop`, green check run, no comment |
+
+The earlier plain-`GITHUB_TOKEN` workflows (`sync-gate-*.yml`,
+`agent-review-sim.yml`, `bot-review.yml`) remain as the cheaper way to
+probe event mechanics without spending AI credits.
+
+`HANDOFF.md` has the full account of getting the agent running, including
+the PAT permissions it needs. `CLAUDE.md` is the orientation for Claude Code.
