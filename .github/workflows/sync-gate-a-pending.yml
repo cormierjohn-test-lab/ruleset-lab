@@ -1,0 +1,43 @@
+name: Sync Gate A - pending reviewer
+
+# Variant A of the conditional-synchronize test.
+#
+# Gate: run on review_requested, or on a push where SOMEONE is currently a
+# pending reviewer.
+#
+# The suspected flaw: a bot review does NOT clear requested_reviewers (measured
+# on PR #37 and #38 in this repo), so once a review has been requested that
+# field stays populated for the life of the PR -- and this gate then fires on
+# EVERY subsequent push. This workflow exists to prove that, not to ship it.
+#
+# concurrency + cancel-in-progress is included so rapid pushes collapse into a
+# single surviving run; the run log records whether it was cancelled.
+on:
+  pull_request:
+    types: [review_requested, synchronize]
+
+concurrency:
+  group: sync-gate-a-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  gate:
+    if: >
+      github.event.action == 'review_requested' ||
+      github.event.pull_request.requested_reviewers[0] != null
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report why this run fired
+        run: |
+          echo "GATE A FIRED"
+          echo "  action:              ${{ github.event.action }}"
+          echo "  pending reviewers:   ${{ toJSON(github.event.pull_request.requested_reviewers.*.login) }}"
+          echo "  head sha:            ${{ github.event.pull_request.head.sha }}"
+      - name: Simulate agent work
+        run: sleep 25
+      - name: Survived
+        run: echo "GATE A COMPLETED (not cancelled by a later push)"
