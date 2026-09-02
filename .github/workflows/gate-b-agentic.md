@@ -29,7 +29,9 @@ permissions:
 engine:
   id: copilot
 
-model: claude-sonnet-5
+# model: left unset -- use the engine default, since claude-sonnet-5
+# returned HTTP 401 on an individual Copilot Pro seat and premium models
+# are not necessarily included there.
 
 timeout-minutes: 10
 
