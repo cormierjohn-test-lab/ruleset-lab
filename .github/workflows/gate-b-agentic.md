@@ -29,11 +29,9 @@ permissions:
 engine:
   id: copilot
 
-# claude-sonnet-4.6 is an identifier gh-aw uses in its own workflows.
-# claude-sonnet-5 gave HTTP 401 from the inference proxy, and leaving it
-# unpinned resolved to "auto", which the AI-credits proxy rejects for lack of
-# pricing config -- so the name itself was likely the problem.
-model: claude-sonnet-4.6
+# model: left unset -- use the engine default, since claude-sonnet-5
+# returned HTTP 401 on an individual Copilot Pro seat and premium models
+# are not necessarily included there.
 
 timeout-minutes: 10
 
