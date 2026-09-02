@@ -1,0 +1,38 @@
+name: Approve Probe
+
+# Tests the org setting `can_approve_pull_request_reviews`.
+#
+# The existing bot-review.yml posts REQUEST_CHANGES, which is NOT gated by that
+# setting -- only an APPROVE event is. So bot-review succeeding proves nothing
+# about it. This probe submits an APPROVE with the plain GITHUB_TOKEN, which
+# fails with 422 "not permitted" when the setting is off.
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to approve
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  approve:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Submit an APPROVE review as GITHUB_TOKEN
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr }}/reviews" \
+               --method POST -f event=APPROVE \
+               -f body='Approve probe: GITHUB_TOKEN can submit approving reviews.' \
+               > /tmp/out.json 2>/tmp/err.txt; then
+            echo "RESULT: APPROVE accepted -- can_approve_pull_request_reviews is ON"
+          else
+            echo "RESULT: APPROVE rejected -- setting is OFF or policy blocks it"
+            cat /tmp/err.txt
+            exit 1
+          fi
