@@ -52,10 +52,15 @@ Local diagnostic that matches what CI does (Copilot CLI is installed via
 copilot --prefer-version 1.0.79 -p "reply with the single word PONG"; unset COPILOT_GITHUB_TOKEN
 ```
 
-**Still untested:** the `proceed=false` / `noop` path. The successful run took
-`push_after_bot_review`, so whether `noop` leaves a green check run behind is
-still the open question this probe was built for. It needs a `synchronize`
-push on a PR the bot has never reviewed.
+**`noop` path also proven**, run
+[33589366489](https://github.com/cormierjohn-test-lab/ruleset-lab/actions/runs/33589366489)
+on PR #50 (a PR the bot had never reviewed, then a `synchronize` push). Gate
+returned `proceed=false` / `push_without_prior_bot_review`; the agent emitted
+`create_check_run` first, then `noop`. Result: `Gate B Probe` check run is
+**green on the head SHA** and **no comment** was posted. The "check run before
+noop" ordering in the prompt is sufficient; nothing is silently dropped.
+
+Both PR #42 (proceed path) and PR #50 (noop path) are left open as fixtures.
 
 Everything below this line is the pre-resolution state, kept for the record.
 
