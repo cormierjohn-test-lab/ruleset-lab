@@ -4,3 +4,4 @@ v3
 v4
 v5
 probe-224650
+trigger 2026-09-02T03:34:02Z PAT now has Copilot Requests + Models
