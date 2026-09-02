@@ -13,7 +13,7 @@ orders_df = spark.sql("""
     SELECT
         STORE_NUMBER,
         ORDER_TOTAL,
-        CURRENT_DATE() AS BUSINESS_DATE
+        FROM_UTC_TIMESTAMP(CURRENT_TIMESTAMP(), 'America/Chicago') AS BUSINESS_DATE
     FROM commondata.shared.ORDERS_TBL
 """)
 
