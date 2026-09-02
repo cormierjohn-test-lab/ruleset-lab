@@ -1,0 +1,76 @@
+name: Sync Gate B - bot already reviewed
+
+# Variant B of the conditional-synchronize test.
+#
+# Gate: run on review_requested always; on a push, only if the bot has ALREADY
+# left a review on this PR.
+#
+# The intent is "re-check findings I actually raised" rather than "run on any
+# push once a review is pending". A PR the bot has never looked at does not get
+# reviewed just because someone pushed to it.
+#
+# requested_reviewers cannot express this -- a bot review does not clear that
+# field, so it stays true forever. Whether the bot reviewed is not in the
+# pull_request payload at all, so it needs an API call, which means the gate
+# lives in a step rather than a job-level `if:`.
+on:
+  pull_request:
+    types: [review_requested, synchronize]
+
+concurrency:
+  group: sync-gate-b-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decide whether to run
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ACTION="${{ github.event.action }}"
+
+          if [ "$ACTION" = "review_requested" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "REASON: review_requested -- always run"
+            exit 0
+          fi
+
+          # synchronize: only proceed if this bot has already reviewed.
+          COUNT=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews" \
+                    --jq '[.[] | select(.user.login == "github-actions[bot]")] | length')
+          echo "prior bot reviews: ${COUNT}"
+
+          if [ "${COUNT:-0}" -gt 0 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "REASON: push, and the bot has reviewed before -- re-check"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "REASON: push, but the bot never reviewed this PR -- skip"
+          fi
+
+      - name: Report
+        if: steps.decide.outputs.run == 'true'
+        run: |
+          echo "GATE B FIRED"
+          echo "  action:   ${{ github.event.action }}"
+          echo "  head sha: ${{ github.event.pull_request.head.sha }}"
+
+      - name: Simulate agent work
+        if: steps.decide.outputs.run == 'true'
+        run: sleep 25
+
+      - name: Survived
+        if: steps.decide.outputs.run == 'true'
+        run: echo "GATE B COMPLETED (not cancelled by a later push)"
+
+      - name: Skipped
+        if: steps.decide.outputs.run != 'true'
+        run: echo "GATE B SKIPPED - no prior bot review on this PR"

@@ -1,0 +1,70 @@
+name: Agent Review Sim
+
+# Simulates what our agentic PR reviewers do, so we can answer one question:
+#
+#   After the BOT leaves a review, can the developer get a re-review once they
+#   push fixes?
+#
+# The distinction that matters: when the requested HUMAN reviewer submits their
+# own review, GitHub clears them from requested_reviewers -- that is just the
+# reviewer answering the request, and tells us nothing. When a BOT posts the
+# review instead, the human stays pending, which is the real-world shape.
+#
+# `event` is an input so the same workflow can post COMMENT (what we do today)
+# or REQUEST_CHANGES (what we would do for a blocker finding) and the two
+# outcomes compared directly.
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to review
+        required: true
+      event:
+        description: Review event to submit
+        required: true
+        default: COMMENT
+        type: choice
+        options:
+          - COMMENT
+          - REQUEST_CHANGES
+          - APPROVE
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show reviewer state before
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "BEFORE requested_reviewers:"
+          gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr }}" \
+            --jq '[.requested_reviewers[].login]'
+
+      - name: Submit the review as github-actions[bot]
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr }}/reviews" \
+            --method POST \
+            -f event='${{ inputs.event }}' \
+            -f body='Agent review sim: ${{ inputs.event }}. Simulating an agentic reviewer finding.' \
+            --jq '"submitted: state=\(.state) by=\(.user.login)"'
+
+      - name: Show reviewer state after
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "AFTER requested_reviewers:"
+          gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr }}" \
+            --jq '[.requested_reviewers[].login]'
+          echo "All reviews on the PR:"
+          gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr }}/reviews" \
+            --jq '.[] | "  \(.user.login) state=\(.state)"'
